@@ -26,8 +26,7 @@ func ParseProxyQuery(rawRequestURL string) (*ProxyParams, error) {
 
 	rawQuery := rawRequestURL[qIdx+1:]
 
-	const urlMarker = "url="
-	urlIdx := strings.Index(rawQuery, urlMarker)
+	urlIdx := targetParamIndex(rawQuery)
 	if urlIdx == -1 {
 		return nil, fmt.Errorf("missing url= parameter")
 	}
@@ -40,7 +39,7 @@ func ParseProxyQuery(rawRequestURL string) (*ProxyParams, error) {
 	}
 
 	// Everything after "url=" is the raw target URL (decode once).
-	rawTarget := rawQuery[urlIdx+len(urlMarker):]
+	rawTarget := rawQuery[urlIdx+len("url="):]
 	targetURL, err := url.QueryUnescape(rawTarget)
 	if err != nil {
 		// If it wasn't percent-encoded, use as-is.
@@ -65,6 +64,9 @@ func ValidateTargetURL(raw string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("only http/https URLs are allowed, got %q", u.Scheme)
 	}
+	if u.Host == "" {
+		return fmt.Errorf("missing URL host")
+	}
 	return nil
 }
 
@@ -75,6 +77,7 @@ func BuildProxyURL(proxyBase, targetURL, referer, cookie, token string) string {
 	if LooksLikeSegment(targetURL) {
 		proxyPath = "/proxy/segment.ts"
 	}
+	proxyBase = strings.TrimRight(proxyBase, "/")
 
 	params := url.Values{}
 	if referer != "" {
@@ -115,8 +118,18 @@ func LooksLikeSegment(raw string) bool {
 // OriginHost returns the scheme+host of a URL for restricting auth forwarding.
 func OriginHost(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil {
+	if err != nil || u.Scheme == "" || u.Host == "" {
 		return ""
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+func targetParamIndex(rawQuery string) int {
+	if strings.HasPrefix(rawQuery, "url=") {
+		return 0
+	}
+	if idx := strings.Index(rawQuery, "&url="); idx != -1 {
+		return idx + 1
+	}
+	return -1
 }

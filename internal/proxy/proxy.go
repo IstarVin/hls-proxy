@@ -37,14 +37,15 @@ func Handler(proxyBase string) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// OPTIONS preflight.
 		if r.Method == http.MethodOptions {
-			for k, vs := range headers.BuildCORSPreflight() {
-				for _, v := range vs {
-					w.Header().Set(k, v)
-				}
-			}
+			writeHeaders(w.Header(), headers.BuildCORSPreflight())
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeHeaders(w.Header(), headers.BuildCORSPreflight())
+			w.Header().Set("Allow", "GET, HEAD, OPTIONS")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -67,8 +68,7 @@ func Handler(proxyBase string) http.Handler {
 		timeout := timeouts[preClass]
 
 		// Build outbound request.
-		ctx := r.Context()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, params.TargetURL, nil)
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, params.TargetURL, nil)
 		if err != nil {
 			http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
 			return
@@ -105,11 +105,7 @@ func Handler(proxyBase string) http.Handler {
 
 		// Forward non-2xx errors verbatim (keep CORS headers so the player can read them).
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			for k, vs := range headers.BuildCORSPreflight() {
-				for _, v := range vs {
-					w.Header().Set(k, v)
-				}
-			}
+			writeHeaders(w.Header(), headers.BuildCORSPreflight())
 			http.Error(w, fmt.Sprintf("origin returned %d", resp.StatusCode), resp.StatusCode)
 			return
 		}
@@ -131,7 +127,7 @@ func Handler(proxyBase string) http.Handler {
 
 func resolveProxyBase(proxyBase string, r *http.Request) string {
 	if proxyBase != "" {
-		return proxyBase
+		return strings.TrimRight(proxyBase, "/")
 	}
 
 	scheme := forwardedScheme(r)
@@ -197,24 +193,14 @@ func handleM3U8(w http.ResponseWriter, resp *http.Response, params *urlutil.Prox
 		params.Token,
 	)
 
-	responseHeaders := headers.BuildResponse(resp.Header, contentType)
-	for k, vs := range responseHeaders {
-		for _, v := range vs {
-			w.Header().Set(k, v)
-		}
-	}
+	writeHeaders(w.Header(), headers.BuildResponse(resp.Header, contentType))
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, rewritten)
 }
 
 // handleTS streams the TS segment, stripping any fake PNG header on the fly.
 func handleTS(w http.ResponseWriter, resp *http.Response, contentType string) {
-	responseHeaders := headers.BuildResponse(resp.Header, contentType)
-	for k, vs := range responseHeaders {
-		for _, v := range vs {
-			w.Header().Set(k, v)
-		}
-	}
+	writeHeaders(w.Header(), headers.BuildResponse(resp.Header, contentType))
 	w.WriteHeader(resp.StatusCode)
 
 	sw := strip.NewStripWriter(w)
@@ -225,15 +211,18 @@ func handleTS(w http.ResponseWriter, resp *http.Response, contentType string) {
 
 // handlePassthrough streams the response body with no modification.
 func handlePassthrough(w http.ResponseWriter, resp *http.Response, contentType string) {
-	responseHeaders := headers.BuildResponse(resp.Header, contentType)
-	for k, vs := range responseHeaders {
-		for _, v := range vs {
-			w.Header().Set(k, v)
-		}
-	}
+	writeHeaders(w.Header(), headers.BuildResponse(resp.Header, contentType))
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		logStreamError("passthrough", err)
+	}
+}
+
+func writeHeaders(dst, src http.Header) {
+	for name, values := range src {
+		for _, value := range values {
+			dst.Set(name, value)
+		}
 	}
 }
 

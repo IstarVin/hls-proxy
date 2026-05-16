@@ -53,6 +53,13 @@ func TestParseProxyQuery_MissingURL(t *testing.T) {
 	}
 }
 
+func TestParseProxyQuery_DoesNotMatchSuffixParam(t *testing.T) {
+	_, err := urlutil.ParseProxyQuery("/proxy?noturl=https://cdn.example.com/stream.m3u8")
+	if err == nil {
+		t.Fatal("expected error for missing url= param")
+	}
+}
+
 func TestValidateTargetURL(t *testing.T) {
 	good := []string{
 		"http://example.com/path",
@@ -69,11 +76,19 @@ func TestValidateTargetURL(t *testing.T) {
 		"ftp://example.com",
 		"data:text/html,hello",
 		"javascript:alert(1)",
+		"https:///missing-host",
 	}
 	for _, u := range bad {
 		if err := urlutil.ValidateTargetURL(u); err == nil {
 			t.Errorf("expected error for %q", u)
 		}
+	}
+}
+
+func TestBuildProxyURL_TrimsProxyBaseSlash(t *testing.T) {
+	result := urlutil.BuildProxyURL("https://proxy.com/", "https://cdn.com/stream.m3u8", "", "", "")
+	if strings.HasPrefix(result, "https://proxy.com//") {
+		t.Fatalf("proxy URL has double slash: %s", result)
 	}
 }
 
