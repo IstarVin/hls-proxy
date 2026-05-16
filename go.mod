@@ -1,3 +1,3 @@
-module github.com/yourname/hls-proxy
+module github.com/IstarVin/hls-proxy
 
 go 1.22

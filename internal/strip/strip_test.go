@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/yourname/hls-proxy/internal/strip"
+	"github.com/IstarVin/hls-proxy/internal/strip"
 )
 
 func makePNGPrefixed(tsData []byte) []byte {

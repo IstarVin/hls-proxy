@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/yourname/hls-proxy/internal/headers"
-	"github.com/yourname/hls-proxy/internal/m3u8"
-	"github.com/yourname/hls-proxy/internal/strip"
-	"github.com/yourname/hls-proxy/internal/urlutil"
+	"github.com/IstarVin/hls-proxy/internal/headers"
+	"github.com/IstarVin/hls-proxy/internal/m3u8"
+	"github.com/IstarVin/hls-proxy/internal/strip"
+	"github.com/IstarVin/hls-proxy/internal/urlutil"
 )
 
 var timeouts = map[m3u8.ContentClass]time.Duration{
@@ -108,6 +108,7 @@ func Handler(proxyBase string) http.Handler {
 		if base == "" {
 			base = "http://" + r.Host
 		}
+		log.Printf("Base: %s", base)
 
 		switch class {
 		case m3u8.ClassM3U8:

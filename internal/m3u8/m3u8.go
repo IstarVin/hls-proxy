@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/yourname/hls-proxy/internal/urlutil"
+	"github.com/IstarVin/hls-proxy/internal/urlutil"
 )
 
 // ContentClass categorises an origin response.

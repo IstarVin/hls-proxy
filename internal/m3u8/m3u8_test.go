@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yourname/hls-proxy/internal/m3u8"
+	"github.com/IstarVin/hls-proxy/internal/m3u8"
 )
 
 func TestClassify_ContentType(t *testing.T) {

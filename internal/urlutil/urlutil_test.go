@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yourname/hls-proxy/internal/urlutil"
+	"github.com/IstarVin/hls-proxy/internal/urlutil"
 )
 
 func TestParseProxyQuery_Basic(t *testing.T) {

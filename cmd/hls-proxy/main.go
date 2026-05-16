@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/yourname/hls-proxy/internal/proxy"
+	"github.com/IstarVin/hls-proxy/internal/proxy"
 )
 
 func main() {
