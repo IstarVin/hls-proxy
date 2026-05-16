@@ -22,19 +22,24 @@ const (
 // Classify determines how to handle a response based on Content-Type and URL.
 // It also accounts for servers that send image/png for TS segments.
 func Classify(contentType, targetURL string) ContentClass {
-	ct := strings.ToLower(contentType)
+	if class := contentTypeClass(contentType); class != ClassPassthrough {
+		return class
+	}
+	return urlPathClass(targetURL)
+}
 
-	// Explicit playlist types.
+func contentTypeClass(contentType string) ContentClass {
+	ct := strings.ToLower(contentType)
 	if strings.Contains(ct, "mpegurl") {
 		return ClassM3U8
 	}
-	// Explicit TS MIME type.
 	if strings.Contains(ct, "mp2t") {
 		return ClassTS
 	}
+	return ClassPassthrough
+}
 
-	// Fall back to URL extension — this also handles the image/png masquerade:
-	// if the URL ends in .ts we treat the body as TS regardless of Content-Type.
+func urlPathClass(targetURL string) ContentClass {
 	path := strings.ToLower(strings.SplitN(targetURL, "?", 2)[0])
 	if strings.HasSuffix(path, ".m3u8") || strings.HasSuffix(path, ".m3") {
 		return ClassM3U8
@@ -63,6 +68,13 @@ func EffectiveContentType(originContentType string, class ContentClass) string {
 // RewriteM3U8 rewrites all URLs inside a playlist body so they go through the
 // proxy, carrying the same auth context forward.
 func RewriteM3U8(text, m3u8URL, proxyBase, referer, cookie, token string) string {
+	opts := rewriteOptions{
+		baseURL:   m3u8URL,
+		proxyBase: proxyBase,
+		referer:   referer,
+		cookie:    cookie,
+		token:     token,
+	}
 	lines := strings.Split(text, "\n")
 	lines = sortVariantPlaylists(lines)
 	out := make([]string, 0, len(lines))
@@ -76,17 +88,23 @@ func RewriteM3U8(text, m3u8URL, proxyBase, referer, cookie, token string) string
 
 		case strings.HasPrefix(trimmed, "#"):
 			// Rewrite URI="..." attributes inline.
-			rewritten := rewriteURIAttrs(trimmed, m3u8URL, proxyBase, referer, cookie, token)
-			out = append(out, rewritten)
+			out = append(out, rewriteURIAttrs(trimmed, opts))
 
 		default:
 			// Bare URL line (segment or sub-playlist).
-			abs := resolveURL(trimmed, m3u8URL)
-			out = append(out, urlutil.BuildProxyURL(proxyBase, abs, referer, cookie, token))
+			out = append(out, proxyLine(trimmed, opts))
 		}
 	}
 
 	return strings.Join(out, "\n")
+}
+
+type rewriteOptions struct {
+	baseURL   string
+	proxyBase string
+	referer   string
+	cookie    string
+	token     string
 }
 
 type variantPlaylist struct {
@@ -155,20 +173,18 @@ func sortVariantPlaylists(lines []string) []string {
 
 func streamResolution(line string) (int, int, bool) {
 	const key = "RESOLUTION="
-	idx := strings.Index(strings.ToUpper(line), key)
+	upperLine := strings.ToUpper(line)
+	idx := strings.Index(upperLine, key)
 	if idx == -1 {
 		return 0, 0, false
 	}
 
-	value := line[idx+len(key):]
+	value := strings.ToLower(line[idx+len(key):])
 	if comma := strings.IndexByte(value, ','); comma != -1 {
 		value = value[:comma]
 	}
 
 	parts := strings.SplitN(value, "x", 2)
-	if len(parts) != 2 {
-		parts = strings.SplitN(value, "X", 2)
-	}
 	if len(parts) != 2 {
 		return 0, 0, false
 	}
@@ -185,7 +201,7 @@ func streamResolution(line string) (int, int, bool) {
 }
 
 // rewriteURIAttrs rewrites all URI="..." occurrences in a tag line.
-func rewriteURIAttrs(line, base, proxyBase, referer, cookie, token string) string {
+func rewriteURIAttrs(line string, opts rewriteOptions) string {
 	const open = `URI="`
 	var sb strings.Builder
 	rest := line
@@ -204,12 +220,16 @@ func rewriteURIAttrs(line, base, proxyBase, referer, cookie, token string) strin
 			break
 		}
 		uri := rest[:end]
-		abs := resolveURL(uri, base)
-		sb.WriteString(urlutil.BuildProxyURL(proxyBase, abs, referer, cookie, token))
+		sb.WriteString(proxyLine(uri, opts))
 		sb.WriteByte('"')
 		rest = rest[end+1:]
 	}
 	return sb.String()
+}
+
+func proxyLine(line string, opts rewriteOptions) string {
+	abs := resolveURL(line, opts.baseURL)
+	return urlutil.BuildProxyURL(opts.proxyBase, abs, opts.referer, opts.cookie, opts.token)
 }
 
 // resolveURL resolves a possibly-relative URL against a base URL.

@@ -94,7 +94,7 @@ func Handler(proxyBase string) http.Handler {
 		// Re-classify now that we have the actual Content-Type from the origin.
 		originCT := resp.Header.Get("Content-Type")
 		class := m3u8.Classify(originCT, params.TargetURL)
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 &&
+		if isSuccessStatus(resp.StatusCode) &&
 			class == m3u8.ClassPassthrough &&
 			strings.Contains(strings.ToLower(originCT), "image/png") {
 			class = sniffPNGClass(resp)
@@ -104,7 +104,7 @@ func Handler(proxyBase string) http.Handler {
 		effectiveCT := m3u8.EffectiveContentType(originCT, class)
 
 		// Forward non-2xx errors verbatim (keep CORS headers so the player can read them).
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if !isSuccessStatus(resp.StatusCode) {
 			writeHeaders(w.Header(), headers.BuildCORSPreflight())
 			http.Error(w, fmt.Sprintf("origin returned %d", resp.StatusCode), resp.StatusCode)
 			return
@@ -224,6 +224,10 @@ func writeHeaders(dst, src http.Header) {
 			dst.Set(name, value)
 		}
 	}
+}
+
+func isSuccessStatus(statusCode int) bool {
+	return statusCode >= 200 && statusCode < 300
 }
 
 func logStreamError(label string, err error) {

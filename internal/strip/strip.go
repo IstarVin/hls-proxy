@@ -2,6 +2,8 @@
 // segments. Detection is fully dynamic — no hardcoded offset is assumed.
 package strip
 
+import "io"
+
 const (
 	tsSyncByte   = 0x47
 	tsPacketSize = 188
@@ -62,13 +64,13 @@ func IsPNGPrefixedTS(data []byte) bool {
 // StripWriter wraps an io.Writer and strips the fake PNG header from the first
 // write only. All subsequent writes pass through untouched.
 type StripWriter struct {
-	w         interface{ Write([]byte) (int, error) }
+	w         io.Writer
 	processed bool
 	buf       []byte
 }
 
 // NewStripWriter returns a StripWriter that forwards stripped bytes to w.
-func NewStripWriter(w interface{ Write([]byte) (int, error) }) *StripWriter {
+func NewStripWriter(w io.Writer) *StripWriter {
 	return &StripWriter{w: w}
 }
 

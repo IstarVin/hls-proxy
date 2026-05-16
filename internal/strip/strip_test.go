@@ -132,8 +132,12 @@ func TestStripWriter_MultipleWrites(t *testing.T) {
 
 	var buf bytes.Buffer
 	sw := strip.NewStripWriter(&buf)
-	sw.Write(firstChunk)
-	sw.Write(rest)
+	if _, err := sw.Write(firstChunk); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sw.Write(rest); err != nil {
+		t.Fatal(err)
+	}
 
 	if !bytes.Equal(buf.Bytes(), ts) {
 		t.Fatalf("multi-write: got %d bytes, want %d", buf.Len(), len(ts))
