@@ -122,3 +122,31 @@ func TestRewriteM3U8_AuthPropagation(t *testing.T) {
 		t.Error("token not propagated")
 	}
 }
+
+func TestRewriteM3U8_SortsVariantPlaylistsByResolutionDescending(t *testing.T) {
+	playlist := `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360
+low.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+high.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720
+mid.m3u8`
+
+	result := m3u8.RewriteM3U8(
+		playlist,
+		"https://cdn.example.com/hls/master.m3u8",
+		"https://proxy.com",
+		"", "", "",
+	)
+
+	high := strings.Index(result, "high%2Em3u8")
+	mid := strings.Index(result, "mid%2Em3u8")
+	low := strings.Index(result, "low%2Em3u8")
+	if high == -1 || mid == -1 || low == -1 {
+		t.Fatalf("rewritten variants missing:\n%s", result)
+	}
+	if !(high < mid && mid < low) {
+		t.Fatalf("variants not sorted by descending resolution:\n%s", result)
+	}
+}

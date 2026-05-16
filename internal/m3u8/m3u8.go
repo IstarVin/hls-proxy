@@ -3,6 +3,8 @@ package m3u8
 
 import (
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/IstarVin/hls-proxy/internal/urlutil"
@@ -62,6 +64,7 @@ func EffectiveContentType(originContentType string, class ContentClass) string {
 // proxy, carrying the same auth context forward.
 func RewriteM3U8(text, m3u8URL, proxyBase, referer, cookie, token string) string {
 	lines := strings.Split(text, "\n")
+	lines = sortVariantPlaylists(lines)
 	out := make([]string, 0, len(lines))
 
 	for _, line := range lines {
@@ -84,6 +87,101 @@ func RewriteM3U8(text, m3u8URL, proxyBase, referer, cookie, token string) string
 	}
 
 	return strings.Join(out, "\n")
+}
+
+type variantPlaylist struct {
+	lines  []string
+	width  int
+	height int
+	index  int
+}
+
+func sortVariantPlaylists(lines []string) []string {
+	var variants []variantPlaylist
+	first := -1
+	last := -1
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(trimmed, "#EXT-X-STREAM-INF:") || i+1 >= len(lines) {
+			continue
+		}
+
+		width, height, ok := streamResolution(trimmed)
+		if !ok {
+			continue
+		}
+
+		next := strings.TrimSpace(lines[i+1])
+		if next == "" || strings.HasPrefix(next, "#") {
+			continue
+		}
+
+		if first == -1 {
+			first = i
+		}
+		last = i + 1
+		variants = append(variants, variantPlaylist{
+			lines:  []string{lines[i], lines[i+1]},
+			width:  width,
+			height: height,
+			index:  len(variants),
+		})
+		i++
+	}
+
+	if len(variants) < 2 {
+		return lines
+	}
+
+	sort.SliceStable(variants, func(i, j int) bool {
+		if variants[i].height != variants[j].height {
+			return variants[i].height > variants[j].height
+		}
+		if variants[i].width != variants[j].width {
+			return variants[i].width > variants[j].width
+		}
+		return variants[i].index < variants[j].index
+	})
+
+	out := make([]string, 0, len(lines))
+	out = append(out, lines[:first]...)
+	for _, variant := range variants {
+		out = append(out, variant.lines...)
+	}
+	out = append(out, lines[last+1:]...)
+	return out
+}
+
+func streamResolution(line string) (int, int, bool) {
+	const key = "RESOLUTION="
+	idx := strings.Index(strings.ToUpper(line), key)
+	if idx == -1 {
+		return 0, 0, false
+	}
+
+	value := line[idx+len(key):]
+	if comma := strings.IndexByte(value, ','); comma != -1 {
+		value = value[:comma]
+	}
+
+	parts := strings.SplitN(value, "x", 2)
+	if len(parts) != 2 {
+		parts = strings.SplitN(value, "X", 2)
+	}
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+
+	width, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, false
+	}
+	height, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return 0, 0, false
+	}
+	return width, height, true
 }
 
 // rewriteURIAttrs rewrites all URI="..." occurrences in a tag line.
