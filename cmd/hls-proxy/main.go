@@ -18,6 +18,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/proxy", proxy.Handler(proxyBase))
+	mux.Handle("/proxy/", proxy.Handler(proxyBase))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("HLS proxy OK\n"))

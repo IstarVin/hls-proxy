@@ -69,6 +69,11 @@ func ValidateTargetURL(raw string) error {
 // BuildProxyURL builds a proxy URL for a given target, propagating auth params.
 // url= is always appended last so ParseProxyQuery can use the raw-split strategy.
 func BuildProxyURL(proxyBase, targetURL, referer, cookie, token string) string {
+	proxyPath := "/proxy"
+	if LooksLikeSegment(targetURL) {
+		proxyPath = "/proxy/segment.ts"
+	}
+
 	params := url.Values{}
 	if referer != "" {
 		params.Set("referer", referer)
@@ -81,12 +86,22 @@ func BuildProxyURL(proxyBase, targetURL, referer, cookie, token string) string {
 	}
 
 	prefix := params.Encode()
-	encoded := url.QueryEscape(targetURL)
+	encoded := encodeTargetURL(targetURL)
 
 	if prefix != "" {
-		return proxyBase + "/proxy?" + prefix + "&url=" + encoded
+		return proxyBase + proxyPath + "?" + prefix + "&url=" + encoded
 	}
-	return proxyBase + "/proxy?url=" + encoded
+	return proxyBase + proxyPath + "?url=" + encoded
+}
+
+func encodeTargetURL(targetURL string) string {
+	return strings.ReplaceAll(url.QueryEscape(targetURL), ".", "%2E")
+}
+
+// LooksLikeSegment reports whether a URL is likely an HLS media segment.
+func LooksLikeSegment(raw string) bool {
+	path := strings.ToLower(strings.SplitN(raw, "?", 2)[0])
+	return strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".png")
 }
 
 // OriginHost returns the scheme+host of a URL for restricting auth forwarding.

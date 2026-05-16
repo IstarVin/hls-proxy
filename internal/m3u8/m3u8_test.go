@@ -78,7 +78,7 @@ seg002.ts
 			t.Errorf("bare segment %q still present in output", seg)
 		}
 		// Must appear as an absolute URL routed through the proxy.
-		expected := "https%3A%2F%2Fcdn.example.com%2Fhls%2F" + seg
+		expected := strings.ReplaceAll("https%3A%2F%2Fcdn.example.com%2Fhls%2F"+seg, ".", "%2E")
 		if !strings.Contains(result, expected) {
 			t.Errorf("rewritten segment %q not found in output:\n%s", seg, result)
 		}

@@ -79,6 +79,9 @@ func TestValidateTargetURL(t *testing.T) {
 
 func TestBuildProxyURL_URLIsLast(t *testing.T) {
 	result := urlutil.BuildProxyURL("https://proxy.com", "https://cdn.com/seg.ts", "https://ref.com", "", "tok")
+	if !strings.HasPrefix(result, "https://proxy.com/proxy/segment.ts?") {
+		t.Fatalf("segment proxy path missing: %s", result)
+	}
 	// url= must be the last parameter.
 	urlIdx := strings.Index(result, "url=")
 	if urlIdx == -1 {
@@ -87,5 +90,29 @@ func TestBuildProxyURL_URLIsLast(t *testing.T) {
 	afterURL := result[urlIdx:]
 	if strings.Contains(afterURL[4:], "referer=") || strings.Contains(afterURL[4:], "token=") {
 		t.Errorf("url= is not the last parameter: %s", result)
+	}
+}
+
+func TestBuildProxyURL_PNGSegmentUsesTSPathHint(t *testing.T) {
+	result := urlutil.BuildProxyURL("https://proxy.com", "https://cdn.com/fake.png", "https://ref.com", "", "")
+	if !strings.HasPrefix(result, "https://proxy.com/proxy/segment.ts?") {
+		t.Fatalf("PNG segment proxy path missing: %s", result)
+	}
+	if strings.Contains(result, ".png") {
+		t.Fatalf("PNG extension leaked into proxy URL: %s", result)
+	}
+	if !strings.Contains(result, "url=https%3A%2F%2Fcdn%2Ecom%2Ffake%2Epng") {
+		t.Fatalf("target URL missing: %s", result)
+	}
+}
+
+func TestParseProxyQuery_EscapedDots(t *testing.T) {
+	raw := "/proxy/segment.ts?url=https%3A%2F%2Fcdn%2Ecom%2Ffake%2Epng"
+	p, err := urlutil.ParseProxyQuery(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.TargetURL != "https://cdn.com/fake.png" {
+		t.Fatalf("got %q", p.TargetURL)
 	}
 }
