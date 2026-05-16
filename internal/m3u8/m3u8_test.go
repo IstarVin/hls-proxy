@@ -101,7 +101,7 @@ seg001.ts`
 	if strings.Contains(result, `URI="https://keys.example.com/key"`) {
 		t.Error("key URI was not rewritten")
 	}
-	if !strings.Contains(result, `URI="https://proxy.com/proxy?url=`) {
+	if !strings.Contains(result, `URI="https://proxy.com/proxy?`) || !strings.Contains(result, "url=") {
 		t.Errorf("key URI not routed through proxy:\n%s", result)
 	}
 }

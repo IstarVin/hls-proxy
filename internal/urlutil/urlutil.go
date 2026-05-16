@@ -12,6 +12,7 @@ type ProxyParams struct {
 	Referer   string
 	Cookie    string
 	Token     string
+	Origin    string
 }
 
 // ParseProxyQuery parses the raw request URL.
@@ -51,6 +52,7 @@ func ParseProxyQuery(rawRequestURL string) (*ProxyParams, error) {
 		Referer:   normalParams.Get("referer"),
 		Cookie:    normalParams.Get("cookie"),
 		Token:     normalParams.Get("token"),
+		Origin:    normalParams.Get("origin"),
 	}, nil
 }
 
@@ -83,6 +85,12 @@ func BuildProxyURL(proxyBase, targetURL, referer, cookie, token string) string {
 	}
 	if token != "" {
 		params.Set("token", token)
+	}
+
+	// Include origin (scheme://host) for the target so handlers can set
+	// the Origin header or otherwise make origin-restricted decisions.
+	if o := OriginHost(targetURL); o != "" {
+		params.Set("origin", o)
 	}
 
 	prefix := params.Encode()

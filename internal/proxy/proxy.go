@@ -73,7 +73,7 @@ func Handler(proxyBase string) http.Handler {
 			http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
 			return
 		}
-		outbound := headers.BuildOutbound(r.Header, params.Referer, params.Cookie, params.Token)
+		outbound := headers.BuildOutbound(r.Header, params.Referer, params.Cookie, params.Token, params.Origin)
 		req.Header = outbound
 
 		// Per-request timeout via a timed http.Client copy.
@@ -114,10 +114,7 @@ func Handler(proxyBase string) http.Handler {
 			return
 		}
 
-		base := proxyBase
-		if base == "" {
-			base = "http://" + r.Host
-		}
+		base := resolveProxyBase(proxyBase, r)
 
 		switch class {
 		case m3u8.ClassM3U8:
@@ -130,6 +127,42 @@ func Handler(proxyBase string) http.Handler {
 			handlePassthrough(w, resp, effectiveCT)
 		}
 	})
+}
+
+func resolveProxyBase(proxyBase string, r *http.Request) string {
+	if proxyBase != "" {
+		return proxyBase
+	}
+
+	scheme := forwardedScheme(r)
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+
+	host := forwardedHost(r)
+	if host == "" {
+		host = r.Host
+	}
+
+	return scheme + "://" + host
+}
+
+func forwardedScheme(r *http.Request) string {
+	if v := r.Header.Get("X-Forwarded-Proto"); v != "" {
+		return strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	return ""
+}
+
+func forwardedHost(r *http.Request) string {
+	if v := r.Header.Get("X-Forwarded-Host"); v != "" {
+		return strings.TrimSpace(strings.Split(v, ",")[0])
+	}
+	return ""
 }
 
 func sniffPNGClass(resp *http.Response) m3u8.ContentClass {

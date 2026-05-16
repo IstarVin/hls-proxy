@@ -19,7 +19,9 @@ var forwardFromOrigin = []string{
 }
 
 // BuildOutbound constructs headers to send to the origin server.
-func BuildOutbound(playerHeaders http.Header, referer, cookie, token string) http.Header {
+// BuildOutbound constructs headers to send to the origin server.
+// If origin is non-empty it will be set as the `Origin` header.
+func BuildOutbound(playerHeaders http.Header, referer, cookie, token, origin string) http.Header {
 	h := make(http.Header)
 	for _, name := range forwardFromPlayer {
 		if v := playerHeaders.Get(name); v != "" {
@@ -27,6 +29,7 @@ func BuildOutbound(playerHeaders http.Header, referer, cookie, token string) htt
 		}
 	}
 	if referer != "" {
+		h.Set("Origin", referer)
 		h.Set("Referer", referer)
 	}
 	if cookie != "" {
@@ -35,6 +38,10 @@ func BuildOutbound(playerHeaders http.Header, referer, cookie, token string) htt
 	if token != "" {
 		h.Set("Authorization", "Bearer "+token)
 	}
+	if origin != "" {
+		h.Set("Origin", origin)
+	}
+
 	return h
 }
 
