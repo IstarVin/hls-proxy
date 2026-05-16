@@ -3,11 +3,14 @@ package proxy
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/IstarVin/hls-proxy/internal/headers"
@@ -82,7 +85,7 @@ func Handler(proxyBase string) http.Handler {
 
 		resp, err := timedClient.Do(req)
 		if err != nil {
-			log.Printf("upstream fetch error: %v", err)
+			logUpstreamFetchError(err)
 			http.Error(w, "bad gateway: "+err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -183,7 +186,7 @@ func handleTS(w http.ResponseWriter, resp *http.Response, contentType string) {
 
 	sw := strip.NewStripWriter(w)
 	if _, err := io.Copy(sw, resp.Body); err != nil {
-		log.Printf("TS stream error: %v", err)
+		logStreamError("TS", err)
 	}
 }
 
@@ -197,6 +200,35 @@ func handlePassthrough(w http.ResponseWriter, resp *http.Response, contentType s
 	}
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("passthrough stream error: %v", err)
+		logStreamError("passthrough", err)
 	}
+}
+
+func logStreamError(label string, err error) {
+	if isBenignStreamError(err) {
+		return
+	}
+	log.Printf("%s stream error: %v", label, err)
+}
+
+func logUpstreamFetchError(err error) {
+	if isBenignStreamError(err) {
+		return
+	}
+	log.Printf("upstream fetch error: %v", err)
+}
+
+func isBenignStreamError(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, context.Canceled) ||
+		errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "context canceled")
 }
