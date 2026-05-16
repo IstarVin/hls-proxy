@@ -67,8 +67,11 @@ func Handler(proxyBase string) http.Handler {
 		preClass := m3u8.Classify("", params.TargetURL)
 		timeout := timeouts[preClass]
 
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+
 		// Build outbound request.
-		req, err := http.NewRequestWithContext(r.Context(), r.Method, params.TargetURL, nil)
+		req, err := http.NewRequestWithContext(ctx, r.Method, params.TargetURL, nil)
 		if err != nil {
 			http.Error(w, "failed to build upstream request", http.StatusInternalServerError)
 			return
@@ -76,14 +79,7 @@ func Handler(proxyBase string) http.Handler {
 		outbound := headers.BuildOutbound(r.Header, params.Referer, params.Cookie, params.Token, params.Origin)
 		req.Header = outbound
 
-		// Per-request timeout via a timed http.Client copy.
-		timedClient := &http.Client{
-			Transport:     client.Transport,
-			CheckRedirect: client.CheckRedirect,
-			Timeout:       timeout,
-		}
-
-		resp, err := timedClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			logUpstreamFetchError(err)
 			http.Error(w, "bad gateway: "+err.Error(), http.StatusBadGateway)

@@ -79,34 +79,49 @@ func BuildProxyURL(proxyBase, targetURL, referer, cookie, token string) string {
 	}
 	proxyBase = strings.TrimRight(proxyBase, "/")
 
-	params := url.Values{}
-	if referer != "" {
-		params.Set("referer", referer)
-	}
+	var b strings.Builder
+	b.Grow(len(proxyBase) + len(proxyPath) + len(targetURL) + len(referer) + len(cookie) + len(token) + 64)
+	b.WriteString(proxyBase)
+	b.WriteString(proxyPath)
+	b.WriteByte('?')
+
+	hasParam := false
 	if cookie != "" {
-		params.Set("cookie", cookie)
-	}
-	if token != "" {
-		params.Set("token", token)
+		writeQueryParam(&b, &hasParam, "cookie", cookie)
 	}
 
 	// Include origin (scheme://host) for the target so handlers can set
 	// the Origin header or otherwise make origin-restricted decisions.
 	if o := OriginHost(targetURL); o != "" {
-		params.Set("origin", o)
+		writeQueryParam(&b, &hasParam, "origin", o)
+	}
+	if referer != "" {
+		writeQueryParam(&b, &hasParam, "referer", referer)
+	}
+	if token != "" {
+		writeQueryParam(&b, &hasParam, "token", token)
 	}
 
-	prefix := params.Encode()
-	encoded := encodeTargetURL(targetURL)
-
-	if prefix != "" {
-		return proxyBase + proxyPath + "?" + prefix + "&url=" + encoded
+	if hasParam {
+		b.WriteByte('&')
 	}
-	return proxyBase + proxyPath + "?url=" + encoded
+	b.WriteString("url=")
+	b.WriteString(encodeTargetURL(targetURL))
+	return b.String()
 }
 
 func encodeTargetURL(targetURL string) string {
 	return strings.ReplaceAll(url.QueryEscape(targetURL), ".", "%2E")
+}
+
+func writeQueryParam(b *strings.Builder, hasParam *bool, key, value string) {
+	if *hasParam {
+		b.WriteByte('&')
+	}
+	*hasParam = true
+	b.WriteString(key)
+	b.WriteByte('=')
+	b.WriteString(url.QueryEscape(value))
 }
 
 // LooksLikeSegment reports whether a URL is likely an HLS media segment.

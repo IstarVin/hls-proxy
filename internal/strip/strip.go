@@ -82,7 +82,8 @@ func (s *StripWriter) Write(p []byte) (int, error) {
 	}
 
 	s.buf = append(s.buf, p...)
-	if s.needsMoreData() {
+	offset, ok := s.stripOffset()
+	if !ok {
 		return len(p), nil
 	}
 
@@ -90,7 +91,6 @@ func (s *StripWriter) Write(p []byte) (int, error) {
 	buffered := s.buf
 	s.buf = nil
 
-	offset := FindTSOffset(buffered)
 	if offset == 0 {
 		if _, err := s.w.Write(buffered); err != nil {
 			return 0, err
@@ -103,17 +103,19 @@ func (s *StripWriter) Write(p []byte) (int, error) {
 	return len(p), err
 }
 
-func (s *StripWriter) needsMoreData() bool {
+func (s *StripWriter) stripOffset() (int, bool) {
 	if len(s.buf) == 0 {
-		return false
+		return 0, true
 	}
 	if !hasPrefix(pngSignature, s.buf) {
-		return false
+		return 0, true
 	}
-	if FindTSOffset(s.buf) != 0 {
-		return false
+
+	offset := FindTSOffset(s.buf)
+	if offset != 0 {
+		return offset, true
 	}
-	return len(s.buf) < SniffSize
+	return 0, len(s.buf) >= SniffSize
 }
 
 func hasPrefix(prefix, data []byte) bool {
