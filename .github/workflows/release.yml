@@ -49,23 +49,11 @@ jobs:
           mkdir -p dist
           go build -trimpath -ldflags="-s -w" -o "dist/hls-proxy-${GOOS}-${GOARCH}${{ matrix.ext }}" ./cmd/hls-proxy
 
-      - name: Package artifact
-        shell: bash
-        run: |
-          cd dist
-          if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            zip "hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}.zip" "hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
-          else
-            tar -czf "hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" "hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}"
-          fi
-
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
+          path: dist/hls-proxy-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
           if-no-files-found: error
 
   publish:
@@ -82,7 +70,5 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
+          files: dist/hls-proxy-*
           generate_release_notes: true
