@@ -2,10 +2,12 @@
 package proxy
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/IstarVin/hls-proxy/internal/headers"
@@ -89,6 +91,11 @@ func Handler(proxyBase string) http.Handler {
 		// Re-classify now that we have the actual Content-Type from the origin.
 		originCT := resp.Header.Get("Content-Type")
 		class := m3u8.Classify(originCT, params.TargetURL)
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 &&
+			class == m3u8.ClassPassthrough &&
+			strings.Contains(strings.ToLower(originCT), "image/png") {
+			class = sniffPNGClass(resp)
+		}
 
 		// Effective Content-Type fixes image/png masquerade for TS segments.
 		effectiveCT := m3u8.EffectiveContentType(originCT, class)
@@ -108,7 +115,6 @@ func Handler(proxyBase string) http.Handler {
 		if base == "" {
 			base = "http://" + r.Host
 		}
-		log.Printf("Base: %s", base)
 
 		switch class {
 		case m3u8.ClassM3U8:
@@ -121,6 +127,21 @@ func Handler(proxyBase string) http.Handler {
 			handlePassthrough(w, resp, effectiveCT)
 		}
 	})
+}
+
+func sniffPNGClass(resp *http.Response) m3u8.ContentClass {
+	buf := make([]byte, strip.SniffSize)
+	n, err := io.ReadFull(resp.Body, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf[:n]), resp.Body))
+		return m3u8.ClassPassthrough
+	}
+	buf = buf[:n]
+	resp.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf), resp.Body))
+	if strip.IsPNGPrefixedTS(buf) {
+		return m3u8.ClassTS
+	}
+	return m3u8.ClassPassthrough
 }
 
 // handleM3U8 buffers the playlist, rewrites URLs, and responds.

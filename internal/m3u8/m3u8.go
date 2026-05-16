@@ -27,7 +27,7 @@ func Classify(contentType, targetURL string) ContentClass {
 		return ClassM3U8
 	}
 	// Explicit TS MIME type.
-	if strings.Contains(ct, "mp2t") || strings.Contains(ct, "png") {
+	if strings.Contains(ct, "mp2t") {
 		return ClassTS
 	}
 

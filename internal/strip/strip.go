@@ -9,6 +9,11 @@ const (
 	maxScan      = 1024 // max bytes to scan for a header before giving up
 )
 
+var pngSignature = []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+
+// SniffSize is enough bytes to find a TS sync pair after any supported prefix.
+const SniffSize = maxScan + tsPacketSize + 1
+
 // FindTSOffset scans the beginning of data for the first position where
 // 0x47 bytes appear at 188-byte intervals. It aims for confirmCount
 // confirmations but accepts 2 when the buffer is short.
@@ -49,11 +54,17 @@ func FindTSOffset(data []byte) int {
 	return 0
 }
 
+// IsPNGPrefixedTS reports whether data starts as PNG and contains TS packets.
+func IsPNGPrefixedTS(data []byte) bool {
+	return hasPrefix(pngSignature, data) && FindTSOffset(data) != 0
+}
+
 // StripWriter wraps an io.Writer and strips the fake PNG header from the first
 // write only. All subsequent writes pass through untouched.
 type StripWriter struct {
 	w         interface{ Write([]byte) (int, error) }
 	processed bool
+	buf       []byte
 }
 
 // NewStripWriter returns a StripWriter that forwards stripped bytes to w.
@@ -67,14 +78,50 @@ func (s *StripWriter) Write(p []byte) (int, error) {
 	if s.processed {
 		return s.w.Write(p)
 	}
-	s.processed = true
 
-	offset := FindTSOffset(p)
+	s.buf = append(s.buf, p...)
+	if s.needsMoreData() {
+		return len(p), nil
+	}
+
+	s.processed = true
+	buffered := s.buf
+	s.buf = nil
+
+	offset := FindTSOffset(buffered)
 	if offset == 0 {
-		return s.w.Write(p)
+		if _, err := s.w.Write(buffered); err != nil {
+			return 0, err
+		}
+		return len(p), nil
 	}
 	// Write the sliced view — no copy, just pointer arithmetic in the slice header.
-	n, err := s.w.Write(p[offset:])
+	_, err := s.w.Write(buffered[offset:])
 	// Report original len so callers don't think bytes were lost.
-	return n + offset, err
+	return len(p), err
+}
+
+func (s *StripWriter) needsMoreData() bool {
+	if len(s.buf) == 0 {
+		return false
+	}
+	if !hasPrefix(pngSignature, s.buf) {
+		return false
+	}
+	if FindTSOffset(s.buf) != 0 {
+		return false
+	}
+	return len(s.buf) < SniffSize
+}
+
+func hasPrefix(prefix, data []byte) bool {
+	if len(data) > len(prefix) {
+		data = data[:len(prefix)]
+	}
+	for i := range data {
+		if data[i] != prefix[i] {
+			return false
+		}
+	}
+	return true
 }
